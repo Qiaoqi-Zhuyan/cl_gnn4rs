@@ -21,6 +21,7 @@ def parse_args():
     # 评价指标
     parser.add_argument('--k', default=20, type=int)
     parser.add_argument('--tao', default=0.2, type=float)
+    parser.add_argument("--stop_cnt", default=10, type=int)
 
     parser.add_argument('--train_data_path', default='./dataset/yelp2018/yelp2018.train', type=str)
     parser.add_argument('--test_data_path', default='./dataset/yelp2018/yelp2018.test', type=str)

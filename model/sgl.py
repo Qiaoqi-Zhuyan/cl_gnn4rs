@@ -74,6 +74,7 @@ class SGL(nn.Module):
         self.best_recall = 0
         self.best_NDCG = 0
         self.best_epoch = 0
+        self.stop_cnt = args.stop_cnt
 
     def train_one_epoch(self):
 
@@ -261,18 +262,33 @@ class SGL(nn.Module):
                   epoch_reg_criterion / self.train_dataset.interact_num)
                   )
 
-            if epoch % 20 == 0:
-                epoch_recall, epoch_NDCG = self.test_epoch()
-                self.recall_history.append(epoch_recall)
-                self.NDCG_history.append(epoch_NDCG)
-                print("recall@%d: %.4f, NDCG@%d: %.4f" % (self.k, epoch_recall, self.k, epoch_NDCG))
+            epoch_recall, epoch_NDCG = self.test_epoch()
+            self.recall_history.append(epoch_recall)
+            self.NDCG_history.append(epoch_NDCG)
+            print("recall@%d: %.4f, NDCG@%d: %.4f" % (self.k, epoch_recall, self.k, epoch_NDCG))
+
+            if epoch_recall > self.best_recall:
+                self.cnt = 0
+                self.best_recall = epoch_recall
+                self.best_epoch = epoch
+
+            if epoch_NDCG > self.best_NDCG:
+                self.cnt = 0
+                self.best_NDCG = epoch_NDCG
+                self.best_epoch = epoch
+
+            if epoch_NDCG < self.best_NDCG and epoch_recall < self.best_epoch:
+                self.cnt += 1
+
+            if self.cnt == self.stop_cnt:
+                print("stop at %d, best recall: %.4f, best NDCG: %.4f" % (epoch, self.best_recall, self.best_NDCG))
+                self.save_model()
+                break
+
 
         # 保存模型
-        folder = './runs/' + self.time + '/' + str(self.epoch_num) + '/'
-        fname = 'sgl.epochs={}.lr={}.layer={}.batch_size={}.dataset={}.pth'
-        fname = fname.format(self.epoch_num, self.lr, self.layer_num, self.batch_size, self.dataset)
-        torch.save(self.model.state_dict(), os.path.join(folder, fname))
-        self.save_metrics(folder)
+            self.save_model()
+
 
     def save_metrics(self, path):
         writer = SummaryWriter(path)
@@ -285,3 +301,9 @@ class SGL(nn.Module):
             writer.add_scalar('NDCG@20', self.NDCG_history[i], i)
 
 
+    def save_model(self):
+        folder = '/root/autodl-tmp/sgl/runs/' + self.time + '/' + str(self.epoch_num) + '/'
+        fname = 'sgl.epochs={}.lr={}.layer={}.batch_size={}.dataset={}.pth'
+        fname = fname.format(self.epoch_num, self.lr, self.layer_num, self.batch_size, self.dataset)
+        torch.save(self.model.state_dict(), os.path.join(folder, fname))
+        self.save_metrics(folder)

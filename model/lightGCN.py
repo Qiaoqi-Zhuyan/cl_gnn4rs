@@ -16,10 +16,12 @@ class LightGCN(nn.Module):
         self.user_embed = nn.Embedding(self.user_num, self.embed_dim)
         self.item_embed = nn.Embedding(self.item_num, self.embed_dim)
 
+        self.reset_params()
+
     def reset_params(self):
         init = torch.nn.init.xavier_uniform_
-        init(self.user_embedding.weight)
-        init(self.item_embedding.weight)
+        init(self.user_embed.weight)
+        init(self.item_embed.weight)
 
     def forward(self, norm_adj):
         ego_embed = torch.cat([self.user_embed.weight, self.item_embed.weight], dim=0)
