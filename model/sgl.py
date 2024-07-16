@@ -16,6 +16,7 @@ from utils.loss import *
 from model.lightGCN import LightGCN
 
 import os
+import datetime
 
 class SGL(nn.Module):
 
@@ -75,6 +76,12 @@ class SGL(nn.Module):
         self.best_NDCG = 0
         self.best_epoch = 0
         self.stop_cnt = args.stop_cnt
+        self.now_time = datetime.datetime.now()
+        self.now_time = datetime.datetime.strftime(self.now_time, '%Y_%m_%d__%H_%M_%S')
+        self.cur_epoch = 0
+
+        self.folder = '/root/autodl-tmp/sgl/runs/' + self.dataset + '/' + self.now_time + '/'
+
 
     def train_one_epoch(self):
 
@@ -126,7 +133,7 @@ class SGL(nn.Module):
             # contrastive learning
             user_infonce_loss = infonce_loss(sub_graph_user_pos_score, sub_graph_user_neg_score, self.tao)
             item_infonce_loss = infonce_loss(sub_graph_item_pos_score, sub_graph_item_neg_score, self.tao)
-            infonce_criterion = torch.sum(user_infonce_loss + item_infonce_loss, dim=-1)
+            infonce_criterion = torch.sum(user_infonce_loss + item_infonce_loss)
 
             # l2 regularization
             reg_loss = l2_loss(self.model.user_embed(batch_user), self.model.item_embed(batch_pos_item), self.model.item_embed(batch_neg_item))
@@ -236,7 +243,8 @@ class SGL(nn.Module):
         return epoch_recall, epoch_NDCG
 
     def run(self):
-        for epoch in tqdm(range(1, self.epoch_num + 1)):
+        for epoch in tqdm(range(self.epoch_num)):
+            self.cur_epoch = epoch
             epoch_criterion, epoch_bpr_criterion, epoch_infonce_criterion, epoch_reg_criterion = self.train_one_epoch()
             self.train_loss.append(epoch_criterion)
             self.bpr_loss.append(epoch_bpr_criterion)
@@ -254,7 +262,7 @@ class SGL(nn.Module):
                     bpr_loss: %.4f \
                     info_NCE_loss: %.4f \
                     reg_loss: %.4f" %
-                  (epoch,
+                  (epoch + 1,
                   self.epoch_num,
                   epoch_criterion / self.train_dataset.interact_num,
                   epoch_bpr_criterion / self.train_dataset.interact_num,
@@ -282,28 +290,37 @@ class SGL(nn.Module):
 
             if self.cnt == self.stop_cnt:
                 print("stop at %d, best recall: %.4f, best NDCG: %.4f" % (epoch, self.best_recall, self.best_NDCG))
-                self.save_model()
+                self.save_metrics(self.folder, epoch)
+                self.save_model(self.folder)
                 break
 
-
         # 保存模型
-            self.save_model()
+        self.save_metrics(self.folder, self.cur_epoch)
+        self.save_model(self.folder)
 
 
-    def save_metrics(self, path):
-        writer = SummaryWriter(path)
-        for i in range(self.epoch_num):
-            writer.add_scalar('Loss', self.train_loss[i], i)
-            writer.add_scalar('bpr_loss', self.bpr_loss[i], i)
-            writer.add_scalar('infoNCE_loss', self.infoNCE_loss[i], i)
-            writer.add_scalar('reg_loss', self.reg_loss[i], i)
-            writer.add_scalar('Recall@20', self.recall_history[i], i)
-            writer.add_scalar('NDCG@20', self.NDCG_history[i], i)
+    # def save_metrics(self, path, epoch):
+    #     writer = SummaryWriter(path)
+    #     for i in range(epoch):
+    #         writer.add_scalar('Loss', self.train_loss[i], i)
+    #         writer.add_scalar('bpr_loss', self.bpr_loss[i], i)
+    #         writer.add_scalar('infoNCE_loss', self.infoNCE_loss[i], i)
+    #         writer.add_scalar('reg_loss', self.reg_loss[i], i)
+    #         writer.add_scalar('Recall@20', self.recall_history[i], i)
+    #         writer.add_scalar('NDCG@20', self.NDCG_history[i], i)
 
+    def save_metrics(self, path, epoch):
+        metric = pd.DataFrame({
+            'epoch': epoch,
+            'Loss': self.train_loss,
+            'bpr_loss': self.infoNCE_loss,
+            'reg_loss': self.reg_loss,
+            'Recall@20': self.recall_history,
+            'NDCG@20': self.NDCG_history
+        })
+        metric.to_csv(self.folder + "log_" + self.now_time + '.csv')
 
-    def save_model(self):
-        folder = '/root/autodl-tmp/sgl/runs/' + self.time + '/' + str(self.epoch_num) + '/'
+    def save_model(self, folder):
         fname = 'sgl.epochs={}.lr={}.layer={}.batch_size={}.dataset={}.pth'
         fname = fname.format(self.epoch_num, self.lr, self.layer_num, self.batch_size, self.dataset)
         torch.save(self.model.state_dict(), os.path.join(folder, fname))
-        self.save_metrics(folder)
