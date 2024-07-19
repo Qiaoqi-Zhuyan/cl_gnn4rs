@@ -7,7 +7,7 @@ def parse_args():
     # 模型参数
     parser.add_argument('--embed_dim', default=64, type=int)
     parser.add_argument('--layer_num', default=3, type=int)
-    parser.add_argument('--cl_reg', default=0.1, type=float)
+    parser.add_argument('--cl_reg', default=0.5, type=float)
     parser.add_argument('--reg', default=0.0001, type=float)
 
     # 图构建
@@ -22,7 +22,7 @@ def parse_args():
     parser.add_argument('--k', default=20, type=int)
     parser.add_argument('--tao', default=0.2, type=float)
     parser.add_argument("--stop_cnt", default=10, type=int)
-
+    # amazon-book, ifashion yelp2018
     parser.add_argument('--train_data_path', default='./dataset/yelp2018/yelp2018.train', type=str)
     parser.add_argument('--test_data_path', default='./dataset/yelp2018/yelp2018.test', type=str)
     parser.add_argument('--datadir', default='yelp2018', type=str)
@@ -36,3 +36,4 @@ args = parse_args()
 if __name__ == "__main__":
     model = SGL(args)
     model.run()
+

@@ -82,7 +82,6 @@ class SGL(nn.Module):
 
         self.folder = '/root/autodl-tmp/sgl/runs/' + self.dataset + '/' + self.now_time + '/'
 
-
     def train_one_epoch(self):
 
         epoch_criterion = 0.
@@ -109,36 +108,50 @@ class SGL(nn.Module):
             sub_graph_user_embed2 = F.normalize(sub_graph_user_embed2)
             sub_graph_item_embed2 = F.normalize(sub_graph_item_embed2)
 
-            # 选择batch中的用户-物品
-            batch_user_embed = all_user_embed[batch_user]
-            batch_pos_item_embed = all_item_embed[batch_pos_item]
-            batch_neg_item_embed = all_item_embed[batch_neg_item]
-            batch_sub_user_embed1 = sub_graph_user_embed1[batch_user]
-            batch_sub_user_embed2 = sub_graph_user_embed2[batch_user]
-            batch_sub_item_embed1 = sub_graph_item_embed1[batch_pos_item]
-            batch_sub_item_embed2 = sub_graph_item_embed2[batch_pos_item]
 
-            pos_score = inner_product(batch_user_embed, batch_pos_item_embed) #[batch_size]
+            # 选择batch中的用户-物品
+            # batch_user_embed = all_user_embed[batch_user]
+            # batch_pos_item_embed = all_item_embed[batch_pos_item]
+            # batch_neg_item_embed = all_item_embed[batch_neg_item]
+            # batch_sub_user_embed1 = sub_graph_user_embed1[batch_user]
+            # batch_sub_user_embed2 = sub_graph_user_embed2[batch_user]
+            # batch_sub_item_embed1 = sub_graph_item_embed1[batch_pos_item]
+            # batch_sub_item_embed2 = sub_graph_item_embed2[batch_pos_item]
+
+            # print(f"subgraph_user_embed: {sub_graph_user_embed1.shape}")
+            # print(f"subgraph_item_embed: {sub_graph_item_embed1.shape}")
+
+            batch_user_embed = F.embedding(batch_user, all_user_embed)
+            batch_pos_item_embed = F.embedding(batch_pos_item, all_item_embed)
+            batch_neg_item_embed = F.embedding(batch_neg_item, all_item_embed)
+            batch_sub_user_embed1 = F.embedding(batch_user, sub_graph_user_embed1)
+            batch_sub_user_embed2 = F.embedding(batch_user, sub_graph_user_embed2)
+            batch_sub_item_embed1 = F.embedding(batch_pos_item, sub_graph_item_embed1)
+            batch_sub_item_embed2 = F.embedding(batch_pos_item, sub_graph_item_embed2)
+
+            pos_score = inner_product(batch_user_embed, batch_pos_item_embed)
             neg_score = inner_product(batch_user_embed, batch_neg_item_embed)
 
-            sub_graph_user_pos_score = inner_product(batch_sub_user_embed1, batch_sub_user_embed2)  # [batch_size]
-            sub_graph_user_neg_score = torch.matmul(batch_sub_user_embed1, torch.transpose(batch_sub_user_embed2, 0, 1))  # [batch_size, num_user]
+            sub_graph_user_pos_score = inner_product(batch_sub_user_embed1, batch_sub_user_embed2)
+            sub_graph_user_total = torch.matmul(batch_sub_user_embed1, torch.transpose(sub_graph_user_embed2, 0, 1))
 
-            sub_graph_item_pos_score = inner_product(batch_sub_item_embed1, batch_sub_item_embed2)  # [batch_size]
-            sub_graph_item_neg_score = torch.matmul(batch_sub_item_embed1, torch.transpose(batch_sub_item_embed2, 0, 1))  # [batch_size, num_item]
+            sub_graph_item_pos_score = inner_product(batch_sub_item_embed1, batch_sub_item_embed2)
+            sub_graph_item_total = torch.matmul(batch_sub_item_embed1, torch.transpose(sub_graph_item_embed2, 0, 1))
 
             # bpr loss (main loss)
             bpr_criterion = bpr_loss(pos_score, neg_score)
 
             # contrastive learning
-            user_infonce_loss = infonce_loss(sub_graph_user_pos_score, sub_graph_user_neg_score, self.tao)
-            item_infonce_loss = infonce_loss(sub_graph_item_pos_score, sub_graph_item_neg_score, self.tao)
+            user_infonce_loss = infonce_loss(sub_graph_user_pos_score, sub_graph_user_total, self.tao)
+            item_infonce_loss = infonce_loss(sub_graph_item_pos_score, sub_graph_item_total, self.tao)
             infonce_criterion = torch.sum(user_infonce_loss + item_infonce_loss)
 
             # l2 regularization
             reg_loss = l2_loss(self.model.user_embed(batch_user), self.model.item_embed(batch_pos_item), self.model.item_embed(batch_neg_item))
 
-            loss = bpr_criterion + self.cl_reg * infonce_criterion + self.reg * reg_loss
+            # loss = bpr_criterion + self.cl_reg * infonce_criterion + self.reg * reg_loss
+            # loss = bpr_criterion
+            loss = bpr_criterion + 0 * infonce_criterion + 0 * reg_loss
 
             epoch_criterion += loss
             epoch_bpr_criterion += bpr_criterion
@@ -289,7 +302,7 @@ class SGL(nn.Module):
                 self.cnt += 1
 
             if self.cnt == self.stop_cnt:
-                print("stop at %d, best recall: %.4f, best NDCG: %.4f" % (epoch, self.best_recall, self.best_NDCG))
+                print("stop at %d, best recall@%d: %.4f, best NDCG@%d: %.4f" % (epoch,self.k, self.best_recall,self.k ,self.best_NDCG))
                 self.save_metrics(self.folder, epoch)
                 self.save_model(self.folder)
                 break
@@ -299,26 +312,26 @@ class SGL(nn.Module):
         self.save_model(self.folder)
 
 
-    # def save_metrics(self, path, epoch):
-    #     writer = SummaryWriter(path)
-    #     for i in range(epoch):
-    #         writer.add_scalar('Loss', self.train_loss[i], i)
-    #         writer.add_scalar('bpr_loss', self.bpr_loss[i], i)
-    #         writer.add_scalar('infoNCE_loss', self.infoNCE_loss[i], i)
-    #         writer.add_scalar('reg_loss', self.reg_loss[i], i)
-    #         writer.add_scalar('Recall@20', self.recall_history[i], i)
-    #         writer.add_scalar('NDCG@20', self.NDCG_history[i], i)
-
     def save_metrics(self, path, epoch):
-        metric = pd.DataFrame({
-            'epoch': epoch,
-            'Loss': self.train_loss,
-            'bpr_loss': self.infoNCE_loss,
-            'reg_loss': self.reg_loss,
-            'Recall@20': self.recall_history,
-            'NDCG@20': self.NDCG_history
-        })
-        metric.to_csv(self.folder + "log_" + self.now_time + '.csv')
+        writer = SummaryWriter(path)
+        for i in range(epoch):
+            writer.add_scalar('Loss', self.train_loss[i], i)
+            writer.add_scalar('bpr_loss', self.bpr_loss[i], i)
+            writer.add_scalar('infoNCE_loss', self.infoNCE_loss[i], i)
+            writer.add_scalar('reg_loss', self.reg_loss[i], i)
+            writer.add_scalar('Recall@20', self.recall_history[i], i)
+            writer.add_scalar('NDCG@20', self.NDCG_history[i], i)
+
+    # def save_metrics(self, path, epoch):
+    #     metric = pd.DataFrame({
+    #         'epoch': epoch,
+    #         'Loss': self.train_loss.cpu(),
+    #         'bpr_loss': self.infoNCE_loss.cpu(),
+    #         'reg_loss': self.reg_loss.cpu(),
+    #         'Recall@20': self.recall_history.cpu(),
+    #         'NDCG@20': self.NDCG_history.cpu()
+    #     })
+    #     metric.to_csv(path + "log_" + self.now_time + '.csv')
 
     def save_model(self, folder):
         fname = 'sgl.epochs={}.lr={}.layer={}.batch_size={}.dataset={}.pth'

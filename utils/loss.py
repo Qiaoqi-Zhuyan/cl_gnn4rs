@@ -62,5 +62,6 @@ def bpr_loss(pos_score, neg_score):
     return -torch.sum(F.logsigmoid(pos_score - neg_score))
 
 
-def infonce_loss(pos_score, neg_score, tao):
-    return torch.logsumexp((neg_score - pos_score[:, None]) / tao, dim=1)
+def infonce_loss(pos_score, total, tao):
+    return torch.logsumexp((total - pos_score[:, None]) / tao, dim=1)
+
